@@ -108,6 +108,9 @@ def run(env_name='MountainCar-v0',
 
             # Reset the environment.
             state = env_test.reset()
+            # Make sure that at test time, the agent starts near bottom of the hill.
+            if state[0] < -0.6 or state[0] > -0.4:
+                state = env_test.reset()
             state = np.expand_dims(state, axis=0)
 
             episode_reward = 0
@@ -132,7 +135,7 @@ def run(env_name='MountainCar-v0',
         log(logfile, it, eval_rewards)
 
 
-logfile = 'experiment_logs/exp_hrl_100_clustering_episodes.txt'
+logfile = 'experiment_logs/exp_dqn_100_clustering_episodes.txt'
 env_name = 'MountainCar-v0'
-agent_type ='h_dqn'
+agent_type ='dqn'
 run(env_name=env_name, agent_type=agent_type, logfile=logfile, use_clustering=True)
