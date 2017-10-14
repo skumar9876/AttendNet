@@ -8,20 +8,20 @@ class ReplayBuffer(object):
         self.max_size = max_size
         self.batch_size = batch_size
 
-        self.states = [None] * self.max_size
-        self.actions = [None] * self.max_size
-        self.rewards = [None] * self.max_size
-        self.next_states = [None] * self.max_size
-        self.terminals = [None] * self.max_size
+        self.states = np.array([None] * self.max_size)
+        self.actions = np.array([None] * self.max_size)
+        self.rewards = np.array([None] * self.max_size)
+        self.next_states = np.array([None] * self.max_size)
+        self.terminals = np.array([None] * self.max_size)
 
         self.curr_pointer = 0
         self.curr_size = 0
 
     def add(self, state, action, reward, next_state, terminal):
-        self.states[self.curr_pointer] = state
+        self.states[self.curr_pointer] = np.squeeze(state)
         self.actions[self.curr_pointer] = action
         self.rewards[self.curr_pointer] = reward
-        self.next_states[self.curr_pointer] = next_state
+        self.next_states[self.curr_pointer] = np.squeeze(next_state)
         self.terminals[self.curr_pointer] = terminal
 
         self.curr_pointer += 1
@@ -36,8 +36,24 @@ class ReplayBuffer(object):
         sample_indices = []
 
         # Ensure that the most recent transition is in the returned batch.
-        sample_indices.append(self._curr_pointer - 1)
+        sample_indices.append(self.curr_pointer - 1)
         for i in xrange(self.batch_size - 1):
             sample_indices.append(random.randint(0, self.curr_size - 1))
 
-        return self.states[sample_indices], self.actions[sample_indices], self.rewards[sample_indices], self.next_states[sample_indices], self.terminals[sample_indices]
+        returned_states = []
+        returned_actions = []
+        returned_rewards = []
+        returned_next_states = []
+        returned_terminals = []
+
+        for i in xrange(len(sample_indices)):
+            index = sample_indices[i]
+            returned_states.append(self.states[index])
+            returned_actions.append(self.actions[index])
+            returned_rewards.append(self.rewards[index])
+            returned_next_states.append(self.next_states[index])
+            returned_terminals.append(self.terminals[index])
+
+        return np.array(returned_states), np.array(returned_actions), np.array(
+            returned_rewards), np.array(returned_next_states), np.array(returned_terminals)
+        # return self.states[sample_indices], self.actions[sample_indices], self.rewards[sample_indices], self.next_states[sample_indices], self.terminals[sample_indices]
