@@ -35,7 +35,6 @@
                 <DrawCuboid type="air" x1="32" x2="33" y1="227" y2="230" z1="4" z2="6"/>
 
                 <DrawBlock   x="5"   y="226"  z="5"  type="iron_block" />                           <!-- the starting marker -->
-                <DrawBlock   x="40"   y="226"  z="3" type="gold_block" />                           <!-- the destination marker -->
 
             </DrawingDecorator>
             <ServerQuitFromTimeUp timeLimitMs="45000" description="out_of_time"/>
@@ -61,11 +60,11 @@
                 </ModifierList>
             </DiscreteMovementCommands>
             <RewardForTouchingBlockType>
-                <Block reward="100.0" type="gold_block" behaviour="onceOnly"/>
+                <Block reward="100.0" type="wool" colour="RED" behaviour="onceOnly"/>
             </RewardForTouchingBlockType>
             <RewardForSendingCommand reward="-1"/>
             <AgentQuitFromTouchingBlockType>
-                <Block type="gold_block" />
+                <Block type="wool" colour="RED"/>
             </AgentQuitFromTouchingBlockType>
         </AgentHandlers>
     </AgentSection>
