@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Mission xmlns="http://ProjectMalmo.microsoft.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <About>
+        <Summary>Find the goal!</Summary>
+    </About>
+
+    <ServerSection>
+        <ServerInitialConditions>
+            <Time>
+                <StartTime>6000</StartTime>
+                <AllowPassageOfTime>false</AllowPassageOfTime>
+            </Time>
+            <Weather>clear</Weather>
+            <AllowSpawning>false</AllowSpawning>
+        </ServerInitialConditions>
+        <ServerHandlers>
+            <FlatWorldGenerator generatorString="3;7,220*1,5*3,2;3;,biome_1" />
+            <DrawingDecorator>
+                <DrawCuboid type="wool" colour="LIGHT_BLUE" x1="0" x2="10" y1="226" y2="236" z1="0" z2="10"/>
+                <DrawCuboid type="air" x1="1" x2="9" y1="227" y2="236" z1="1" z2="9"/>
+
+
+                <DrawCuboid type="wool" colour="LIME" x1="11" x2="21" y1="226" y2="236" z1="0" z2="10"/>
+                <DrawCuboid type="air" x1="12" x2="20" y1="227" y2="236" z1="1" z2="9"/>
+                <DrawCuboid type="air" x1="10" x2="11" y1="227" y2="230" z1="4" z2="6"/>
+
+
+                <DrawCuboid type="wool" colour="MAGENTA" x1="22" x2="32" y1="226" y2="236" z1="0" z2="10"/>
+                <DrawCuboid type="air" x1="23" x2="31" y1="227" y2="236" z1="1" z2="9"/>
+                <DrawCuboid type="air" x1="21" x2="22" y1="227" y2="230" z1="4" z2="6"/>
+
+
+                <DrawCuboid type="wool" colour="RED" x1="33" x2="43" y1="226" y2="236" z1="0" z2="10"/>
+                <DrawCuboid type="air" x1="34" x2="42" y1="227" y2="236" z1="1" z2="9"/>
+                <DrawCuboid type="air" x1="32" x2="33" y1="227" y2="230" z1="4" z2="6"/>
+
+                <DrawBlock   x="5"   y="226"  z="5"  type="iron_block" />                           <!-- the starting marker -->
+                <DrawBlock   x="40"   y="226"  z="3" type="gold_block" />                           <!-- the destination marker -->
+
+            </DrawingDecorator>
+            <ServerQuitFromTimeUp timeLimitMs="45000" description="out_of_time"/>
+            <ServerQuitWhenAnyAgentFinishes />
+        </ServerHandlers>
+    </ServerSection>
+
+    <AgentSection mode="Survival">
+        <Name>Agent</Name>
+        <AgentStart>
+            <Placement x="5.5" y="227.0" z="5.5" pitch="0" yaw="0"/>
+        </AgentStart>
+        <AgentHandlers>
+            <VideoProducer want_depth="false">
+                <Width>640</Width>
+                <Height>480</Height>
+            </VideoProducer>
+            <ObservationFromFullStats />
+
+            <DiscreteMovementCommands>
+                <ModifierList type="deny-list">
+                    <command>attack</command>
+                </ModifierList>
+            </DiscreteMovementCommands>
+            <RewardForTouchingBlockType>
+                <Block reward="100.0" type="gold_block" behaviour="onceOnly"/>
+            </RewardForTouchingBlockType>
+            <RewardForSendingCommand reward="-1"/>
+            <AgentQuitFromTouchingBlockType>
+                <Block type="gold_block" />
+            </AgentQuitFromTouchingBlockType>
+        </AgentHandlers>
+    </AgentSection>
+</Mission>
