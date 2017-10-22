@@ -10,6 +10,10 @@ matplotlib.use('Agg')
 import clustering
 import dqn
 import gym
+try:
+    import gym_minecraft
+except:
+    pass
 from gym.wrappers import Monitor
 import hierarchical_dqn
 import matplotlib.pyplot as plt
@@ -27,8 +31,6 @@ tf.flags.DEFINE_boolean('use_extra_bit', False, 'Whether or not the meta-control
 tf.flags.DEFINE_boolean('use_controller_dqn', False, 'Whether to use a controller dqn as opposed to normal dqn for the controller.')
 tf.flags.DEFINE_boolean('use_intrinsic_timeout', False, 'Whether or not to intrinsically timeout controller agent.')
 tf.flags.DEFINE_boolean('use_memory', False, 'Whether or not the meta-controller should use memory.')
-
-env_name = ''
 
 FLAGS = tf.flags.FLAGS
 
@@ -50,14 +52,21 @@ def log(logfile, iteration, rewards):
 
 
 def make_environment(env_name):
-    return gym.make(env_name)
+    env = gym.make(env_name)
+    if 'Minecraft' in env_name:
+        env.load_mission_file('./game.xml')
+        env.init(start_minecraft=True, allowDiscreteMovement=True)
+    return env
 
 
-def make_agent(agent_type, env, num_clusters, use_extra_travel_penalty, use_extra_bit,
+def make_agent(agent_type, env, env_name, num_clusters, use_extra_travel_penalty, use_extra_bit,
     use_controller_dqn, use_intrinsic_timeout, use_memory):
+
     if agent_type == 'dqn':
-        return dqn.DqnAgent(state_dims=[2],
-                            num_actions=2) # env.action_space.n
+        if 'Minecraft' in env_name:
+            return dqn.MinecraftDQNAgent(state_dims=[84, 84, 3], num_actions=3)
+        else:
+            return dqn.DqnAgent(state_dims=[2], num_actions=2) # env.action_space.n
     elif agent_type == 'h_dqn':
         meta_controller_state_fn, check_subgoal_fn, num_subgoals, subgoals = clustering.get_cluster_fn(
             n_clusters=num_clusters, extra_bit=use_extra_bit)
@@ -127,7 +136,7 @@ def run(env_name='MountainCar-v0',
     env_test = make_environment(env_name)
     # env_test = Monitor(env_test, directory='videos/', video_callable=lambda x: True, resume=True)
     print 'Made environment!'
-    agent = make_agent(agent_type, env, num_clusters, use_extra_travel_penalty, use_extra_bit,
+    agent = make_agent(agent_type, env, env_name, num_clusters, use_extra_travel_penalty, use_extra_bit,
         use_controller_dqn, use_intrinsic_timeout, use_memory)
     print 'Made agent!'
 
@@ -147,9 +156,18 @@ def run(env_name='MountainCar-v0',
 
             while not terminal:
                 action = agent.sample(state)
-                # Remove the do-nothing action.
-                if action == 1:
-                    env_action = 2
+                if 'MountainCar' in env_name:
+                    # Remove the do-nothing action.
+                    if action == 1:
+                        env_action = 2
+                    else:
+                        env_action = action
+                elif 'Minecraft' in env_name:
+                    moves = {0: 0,  # move forward
+                             1: 8,  # turn left
+                             2: 9  # turn right
+                             }
+                    env_action = moves[action]
                 else:
                     env_action = action
 
@@ -214,12 +232,12 @@ def run(env_name='MountainCar-v0',
             eval_rewards.append(episode_reward)
 
         log(logfile, it, eval_rewards)
-	if agent_type == 'h_dqn':
-        	plt.figure()
-        	plt.imshow(heat_map, cmap='hot', interpolation='nearest')
-        	plt.savefig(experiment_dir + '/heatmap_' + str(it) + '.png')
+        if agent_type == 'h_dqn':
+            plt.figure()
+            plt.imshow(heat_map, cmap='hot', interpolation='nearest')
+            plt.savefig(experiment_dir + '/heatmap_' + str(it) + '.png')
 
-run(agent_type=FLAGS.agent_type, logdir=FLAGS.logdir, experiment_dir=FLAGS.experiment_dir,
+run(env_name=FLAGS.env_name, agent_type=FLAGS.agent_type, logdir=FLAGS.logdir, experiment_dir=FLAGS.experiment_dir,
     logfile=FLAGS.logfile, num_clusters=FLAGS.n_clusters,
     use_extra_travel_penalty=FLAGS.use_extra_travel_penalty, use_extra_bit=FLAGS.use_extra_bit,
     use_controller_dqn=FLAGS.use_controller_dqn, use_intrinsic_timeout=FLAGS.use_intrinsic_timeout,
