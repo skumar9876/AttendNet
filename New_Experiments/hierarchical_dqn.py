@@ -21,8 +21,9 @@ class HierarchicalDqnAgent(object):
 
     ARTIFICIAL_PENALTY = -100   # Penalty given to the meta-controller for telling the
                                 # agent to go to the same cluster it is already in.
-    EXTRA_TRAVEL_PENALTY = -2   # Penalty given to meta-controller if controller agent
+    EXTRA_TRAVEL_PENALTY = -1   # Penalty given to meta-controller if controller agent
                                 # travels through additional clusters to get to target cluster.
+    PRETRAIN_EPISODES = 100
 
     def __init__(self,
                  learning_rates=[0.1, 0.00025],
@@ -38,7 +39,23 @@ class HierarchicalDqnAgent(object):
                  use_controller_dqn=False,
                  use_intrinsic_timeout=False,
                  use_memory=False,
-                 memory_size=0):
+                 memory_size=0,
+                 pretrain_controller=False):
+        print "h-DQN"
+        print "Use extra travel penalty:"
+        print use_extra_travel_penalty
+        print "Use extra bit for subgoal center:"
+        print use_extra_bit_for_subgoal_center
+        print "Use controller dqn:"
+        print use_controller_dqn
+        print "Use intrinsic timeout:"
+        print use_intrinsic_timeout
+        print "Use memory:"
+        print use_memory
+        print "Memory size:"
+        print memory_size
+        print "Pretrain Controller:"
+        print pretrain_controller
         """Initializes a hierarchical DQN agent.
 
            Args:
@@ -63,11 +80,15 @@ class HierarchicalDqnAgent(object):
             self.ARTIFICIAL_PENALTY = 0
             state_sizes[0] = state_sizes[0] * 2
 
+        if not pretrain_controller:
+            self.PRETRAIN_EPISODES = 0
 
         if use_memory:
             self._meta_controller = LstmDqnAgent(num_actions=num_subgoals,
                                                  state_dims=[memory_size],
-                                                 sequence_length=memory_size)
+                                                 sequence_length=memory_size,
+                                                 replay_memory_init_size=100,
+                                                 target_update=100)
         else:
             self._meta_controller = QLearningAgent(num_states=state_sizes[0],
                                                    num_actions=num_subgoals,
@@ -104,7 +125,7 @@ class HierarchicalDqnAgent(object):
         self._intermediate_clusters = []
         self._intermediate_dict = defaultdict(int)
         self._intermediate_clusters_dict = defaultdict(int)
-        self._history = [-1 for i in xrange(self._memory_size)]
+        self._history = [0 for i in xrange(self._memory_size)]
 
         # Only used if use_extra_bit_for_subgoal_center is True.
         self._original_state = None
@@ -113,14 +134,23 @@ class HierarchicalDqnAgent(object):
 
         self._intrinsic_time_step = 0
 
+        self._episode = 0
+
     def update_history(self, state):
         returned_state = state
         if self._meta_controller_state_fn:
             returned_state = self._meta_controller_state_fn(state, self._original_state)
 
-        current_cluster = np.where(np.squeeze(self._meta_controller_state) == 1)[0][0]
+        current_cluster_id = np.where(np.squeeze(returned_state) == 1)[0][0] + 1
         new_history = self._history[1:]
-        new_history.append(current_cluster)
+
+        # print "History update!"
+        # print self._history
+        # print new_history
+        # print current_cluster_id
+        new_history.append(current_cluster_id)
+        # print new_history
+        # print ""
         self._history = new_history
 
     def get_meta_controller_state(self, state):
@@ -129,10 +159,7 @@ class HierarchicalDqnAgent(object):
             returned_state = self._meta_controller_state_fn(state, self._original_state)
 
         if self._use_memory:
-            current_cluster = np.where(np.squeeze(self._meta_controller_state) == 1)[0][0]
-            new_history = self._history[1:]
-            new_history.append(current_cluster)
-            returned_state = new_history
+            returned_state = self._history[:]
 
         return returned_state
 
@@ -144,11 +171,12 @@ class HierarchicalDqnAgent(object):
         for i in xrange(len(curr_subgoal)):
             controller_state.append(curr_subgoal[i])
         controller_state = np.array([controller_state])
+        # print controller_state
         return np.copy(controller_state)
 
     def intrinsic_reward(self, state, subgoal_index):
         if self._use_intrinsic_timeout and self._intrinsic_time_step >= self.INTRINSIC_TIME_OUT:
-                return self.INTRINSIC_TIME_OUT_PENALTY
+            return self.INTRINSIC_TIME_OUT_PENALTY
         if self.subgoal_completed(state, subgoal_index):
             return 1
         else:
@@ -163,7 +191,7 @@ class HierarchicalDqnAgent(object):
             if self._use_intrinsic_timeout and self._intrinsic_time_step >= self.INTRINSIC_TIME_OUT:
                 return True
 
-            if self._meta_controller_state[self._curr_subgoal] == 1:
+            if not self._use_memory and self._meta_controller_state[self._curr_subgoal] == 1:
                 if np.sum(self._meta_controller_state) > 1:
                     return False
 
@@ -185,6 +213,7 @@ class HierarchicalDqnAgent(object):
             terminal: extrinsic terminal (True or False)
             eval: Whether the current episode is a train or eval episode.
         """
+
         self._meta_controller_reward += reward
         self._intrinsic_time_step += 1
 
@@ -200,15 +229,45 @@ class HierarchicalDqnAgent(object):
 
         # Check for intermediate state.
         intermediate_meta_controller_state = self.get_meta_controller_state(next_state)
-        self._intermediate_dict[np.where(np.squeeze(intermediate_meta_controller_state) == 1)[0][0]] += 1
+
+        if not self._use_memory:
+            intermediate_cluster_id = np.where(np.squeeze(intermediate_meta_controller_state) == 1)[0][0]
+        else:
+            intermediate_cluster_id = intermediate_meta_controller_state[-1] - 1
+
+        self._intermediate_dict[intermediate_cluster_id] += 1
         # Agent is traveling through a cluster that is not the starting or ending cluster.
+        # FIX THIS!!!!
         if list(intermediate_meta_controller_state[0:self._num_subgoals]) != list(
             self._meta_controller_state[0:self._num_subgoals]) and not subgoal_completed:
             self._meta_controller_reward += self.EXTRA_TRAVEL_PENALTY
-            self._intermediate_clusters.append(np.where(np.squeeze(intermediate_meta_controller_state) == 1)[0][0])
-            self._intermediate_clusters_dict[np.where(np.squeeze(intermediate_meta_controller_state) == 1)[0][0]] += 1
+
+
+            self._intermediate_clusters.append(intermediate_cluster_id)
+            self._intermediate_clusters_dict[intermediate_cluster_id] += 1
+
+        if terminal and not eval:
+            self._episode += 1
 
         if subgoal_completed or terminal:
+            # Normalize the meta-controller reward.
+            self._meta_controller_reward /= 100.0
+
+            meta_controller_state = np.copy(self._meta_controller_state)
+            if not self._use_memory:
+                next_meta_controller_state = self.get_meta_controller_state(next_state)
+            else:
+                returned_state = self._meta_controller_state_fn(next_state, self._original_state)
+                current_cluster_id = np.where(np.squeeze(returned_state) == 1)[0][0] + 1
+                new_history = self._history[1:]
+                new_history.append(current_cluster_id)
+                next_meta_controller_state = new_history
+
+            if self._episode >= self.PRETRAIN_EPISODES:
+                self._meta_controller.store(np.copy(meta_controller_state), self._curr_subgoal,
+                    self._meta_controller_reward, np.copy(next_meta_controller_state),
+                    terminal, eval, reward)
+
             if eval:
                 if subgoal_completed:
                     print "Subgoal completed!"
@@ -247,15 +306,6 @@ class HierarchicalDqnAgent(object):
                     print ""
                     print ""
 
-            # Normalize the meta-controller reward.
-            self._meta_controller_reward /= 100.0
-
-            meta_controller_state = np.copy(self._meta_controller_state)
-            next_meta_controller_state = self.get_meta_controller_state(next_state)
-            self._meta_controller.store(np.copy(meta_controller_state), self._curr_subgoal,
-                self._meta_controller_reward, np.copy(next_meta_controller_state),
-                terminal, eval, reward)
-
             # Reset the current meta-controller state and current subgoal to be None
             # since the current subgoal is finished. Also reset the meta-controller's reward.
             self._next_meta_controller_state = np.copy(next_meta_controller_state)
@@ -271,6 +321,9 @@ class HierarchicalDqnAgent(object):
             self._original_state = None
             self._intrinsic_time_step = 0
 
+            if terminal:
+                self._history = [0 for i in xrange(self._memory_size)]
+
     def sample(self, state):
         """Samples an action from the hierarchical DQN agent.
            Samples a subgoal if necessary from the meta-controller and samples a primitive action
@@ -283,19 +336,24 @@ class HierarchicalDqnAgent(object):
             action: a primitive action.
         """
         if self._meta_controller_state is None:
-            if self._next_meta_controller_state is not None:
+            if self._use_memory:
+                self.update_history(state)
+
+            if self._next_meta_controller_state is not None and not self._use_memory:
                 self._meta_controller_state = self._next_meta_controller_state
             else:
                 self._meta_controller_state = self.get_meta_controller_state(state)
 
-            if use_memory:
-                self.update_history()
-
-            self._curr_subgoal = self._meta_controller.sample(self._meta_controller_state)
+            self._curr_subgoal = self._meta_controller.sample([self._meta_controller_state])
 
             # Artificially penalize the meta-controller for picking the subgoal to
             # be the same as the current cluster.
-            if self._meta_controller_state[self._curr_subgoal] == 1:
+            if self._use_memory:
+                same_cluster_instruction = (self._meta_controller_state[-1] - 1) == self._curr_subgoal
+            else:
+                same_cluster_instruction = self._meta_controller_state[self._curr_subgoal] == 1
+
+            if same_cluster_instruction:
                 self._meta_controller_reward = self.ARTIFICIAL_PENALTY
                 self._original_state = state
 
@@ -318,21 +376,26 @@ class HierarchicalDqnAgent(object):
         returned_info = None
 
         if self._meta_controller_state is None:
-            if self._next_meta_controller_state is not None:
+            if self._use_memory:
+                self.update_history(state)
+
+            if self._next_meta_controller_state is not None and not self._use_memory:
                 self._meta_controller_state = self._next_meta_controller_state
             else:
                 self._meta_controller_state = self.get_meta_controller_state(state)
 
-            if use_memory:
-                self.update_history()
-
-            self._curr_subgoal = self._meta_controller.best_action(self._meta_controller_state)
+            self._curr_subgoal = self._meta_controller.best_action([self._meta_controller_state])
 
             returned_info = [self._meta_controller_state, self._curr_subgoal]
 
             # Artificially penalize the meta-controller for picking the subgoal to
             # be the same as the current cluster.
-            if self._meta_controller_state[self._curr_subgoal] == 1:
+            if self._use_memory:
+                same_cluster_instruction = (self._meta_controller_state[-1] - 1) == self._curr_subgoal
+            else:
+                same_cluster_instruction = self._meta_controller_state[self._curr_subgoal] == 1
+
+            if same_cluster_instruction:
                 self._meta_controller_reward = self.ARTIFICIAL_PENALTY
                 self._original_state = state
 
@@ -343,14 +406,8 @@ class HierarchicalDqnAgent(object):
             print "Current subgoal picked:"
             print self._curr_subgoal
 
-            # if self._meta_controller_state[-1] == 1:
-            #    sys.exit()
-
         controller_state = self.get_controller_state(state, self._curr_subgoal)
         action = self._controller.best_action(controller_state)
-
-        # print "Primitive action:"
-        # print action
 
         return action, returned_info
 

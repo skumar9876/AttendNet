@@ -27,6 +27,8 @@ tf.flags.DEFINE_boolean('use_extra_bit', False, 'Whether or not the meta-control
 tf.flags.DEFINE_boolean('use_controller_dqn', False, 'Whether to use a controller dqn as opposed to normal dqn for the controller.')
 tf.flags.DEFINE_boolean('use_intrinsic_timeout', False, 'Whether or not to intrinsically timeout controller agent.')
 tf.flags.DEFINE_boolean('use_memory', False, 'Whether or not the meta-controller should use memory.')
+tf.flags.DEFINE_integer('memory_size', 5, 'Size of the LSTM memory.')
+tf.flags.DEFINE_boolean('pretrain_controller', False, 'Whether or not to pretrain the controller.')
 
 env_name = ''
 
@@ -54,7 +56,7 @@ def make_environment(env_name):
 
 
 def make_agent(agent_type, env, num_clusters, use_extra_travel_penalty, use_extra_bit,
-    use_controller_dqn, use_intrinsic_timeout, use_memory):
+    use_controller_dqn, use_intrinsic_timeout, use_memory, memory_size, pretrain_controller):
     if agent_type == 'dqn':
         return dqn.DqnAgent(state_dims=[2],
                             num_actions=2) # env.action_space.n
@@ -75,7 +77,8 @@ def make_agent(agent_type, env, num_clusters, use_extra_travel_penalty, use_extr
             use_controller_dqn=use_controller_dqn,
             use_intrinsic_timeout=use_intrinsic_timeout,
             use_memory=use_memory,
-            memory_size=5)
+            memory_size=memory_size,
+            pretrain_controller=pretrain_controller)
 
 
 def run(env_name='MountainCar-v0',
@@ -91,7 +94,9 @@ def run(env_name='MountainCar-v0',
         use_extra_bit=False,
         use_controller_dqn=False,
         use_intrinsic_timeout=False,
-        use_memory=False):
+        use_memory=False,
+        memory_size=5,
+        pretrain_controller=False):
     """Function that executes RL training and evaluation.
 
     Args:
@@ -112,7 +117,9 @@ def run(env_name='MountainCar-v0',
         use_extra_travel_penalty) + '_use_extra_bit_' + str(
         use_extra_bit) + '_use_controller_dqn_' + str(
         use_controller_dqn) + '_use_intrinsic_timeout_' + str(
-        use_intrinsic_timeout) + '_use_memory_' + str(use_memory)
+        use_intrinsic_timeout) + '_use_memory_' + str(
+        use_memory) + '_memory_size_' + str(
+        memory_size) + '_pretrain_controller_' + str(pretrain_controller)
 
     experiment_dir = logdir + experiment_dir
     logfile = experiment_dir + '/' + logfile
@@ -128,7 +135,7 @@ def run(env_name='MountainCar-v0',
     # env_test = Monitor(env_test, directory='videos/', video_callable=lambda x: True, resume=True)
     print 'Made environment!'
     agent = make_agent(agent_type, env, num_clusters, use_extra_travel_penalty, use_extra_bit,
-        use_controller_dqn, use_intrinsic_timeout, use_memory)
+        use_controller_dqn, use_intrinsic_timeout, use_memory, memory_size, pretrain_controller)
     print 'Made agent!'
 
     for it in range(num_iterations):
@@ -189,7 +196,10 @@ def run(env_name='MountainCar-v0',
 
                 if agent_type == 'h_dqn' and info is not None:
                     curr_state = info[0]
-                    curr_state = np.where(np.squeeze(curr_state) == 1)[0][0]
+                    if not use_memory:
+                        curr_state = np.where(np.squeeze(curr_state) == 1)[0][0]
+                    else:
+                        curr_state = np.squeeze(curr_state)[-1] - 1
                     goal = info[1]
                     heat_map[curr_state][goal] += 1
 
@@ -223,6 +233,7 @@ run(agent_type=FLAGS.agent_type, logdir=FLAGS.logdir, experiment_dir=FLAGS.exper
     logfile=FLAGS.logfile, num_clusters=FLAGS.n_clusters,
     use_extra_travel_penalty=FLAGS.use_extra_travel_penalty, use_extra_bit=FLAGS.use_extra_bit,
     use_controller_dqn=FLAGS.use_controller_dqn, use_intrinsic_timeout=FLAGS.use_intrinsic_timeout,
-    use_memory=FLAGS.use_memory)
+    use_memory=FLAGS.use_memory, memory_size=FLAGS.memory_size,
+    pretrain_controller=FLAGS.pretrain_controller)
 
 

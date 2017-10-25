@@ -17,7 +17,8 @@ class DqnAgent(object):
     TARGET_UPDATE = 1000 #10000
 
     def __init__(self, sess=None, learning_rate=0.00025, state_dims=[], num_actions=0,
-        epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_steps=50000):
+        epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_steps=50000, replay_memory_init_size=None,
+        target_update=None):
 
         self._learning_rate = learning_rate
         self._state_dims = state_dims
@@ -25,6 +26,12 @@ class DqnAgent(object):
 
         self._epsilons = np.linspace(epsilon_start, epsilon_end, epsilon_decay_steps)
         self._epsilon_decay_steps = epsilon_decay_steps
+
+        if replay_memory_init_size is not None:
+            self.REPLAY_MEMORY_INIT_SIZE = replay_memory_init_size
+
+        if target_update is not None:
+            self.TARGET_UPDATE = target_update
 
         self._replay_buffer = ReplayBuffer(
             self.REPLAY_MEMORY_SIZE,
@@ -43,6 +50,7 @@ class DqnAgent(object):
             self.sess.run(tf.global_variables_initializer())
 
     def _q_network(self, state):
+        print "Controller!"
         # Three convolutional layers
         # conv1 = tf.contrib.layers.conv2d(
         #    state, 32, 8, 4, activation_fn=tf.nn.relu)
@@ -114,18 +122,31 @@ class DqnAgent(object):
 
     def best_action(self, state):
         q_values = self.sess.run(self._q_values, {self._state: state})
-        return np.argmax(q_values), None
+        return np.argmax(q_values)
 
-    def store(self, state, action, reward, next_state, terminal, eval=False):
+    def store(self, state, action, reward, next_state, terminal, eval=False, curr_reward=False):
         if not eval:
             self._replay_buffer.add(state, action, reward, next_state, terminal)
 
     def update(self):
         states, actions, rewards, next_states, terminals = self._replay_buffer.sample()
+        '''
+        print "Update!"
+        print states
+        print actions
+        print rewards
+        print terminals
+        print ""
+        '''
+
         actions = zip(np.arange(len(actions)), actions)
 
         if len(states) > 0:
             next_states_q_values = self.sess.run(self._target_q_values, {self._state: next_states})
+
+            # print "Next States Q Values:"
+            # print next_states_q_values
+
             next_states_max_q_values = np.max(next_states_q_values, axis=1)
 
             td_targets = rewards + (1 - terminals) * self.DISCOUNT * next_states_max_q_values
