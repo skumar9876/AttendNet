@@ -212,8 +212,18 @@ def run(env_name='MountainCar-v0',
                     heat_map[curr_state][goal] += 1
 
                 # Remove the do-nothing action.
-                if action == 1:
-                    env_action = 2
+                if 'MountainCar' in env_name:
+                    # Remove the do-nothing action.
+                    if action == 1:
+                        env_action = 2
+                    else:
+                        env_action = action
+                elif 'Minecraft' in env_name:
+                    moves = {0: 0,  # move forward
+                             1: 8,  # turn left
+                             2: 9  # turn right
+                             }
+                    env_action = moves[action]
                 else:
                     env_action = action
 
