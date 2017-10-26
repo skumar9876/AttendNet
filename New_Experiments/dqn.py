@@ -229,15 +229,27 @@ class MinecraftDQNAgent(object):
             self._picked_actions = tf.placeholder(shape=[None, 2], dtype=tf.int32, name='picked_actions')
             self._td_targets = tf.placeholder(shape=[None], dtype=tf.float32, name='td_targets')
             self._q_values_pred = tf.gather_nd(self._q_values, self._picked_actions)
-            self._losses = tf.squared_difference(self._q_values_pred, self._td_targets)
+            # self._losses = tf.squared_difference(self._q_values_pred, self._td__targets)
+            self._losses = clipped_error(self._q_values_pred, self._td_targets)
             self._loss = tf.reduce_mean(self._losses)
 
             self.optimizer = tf.train.RMSPropOptimizer(self._learning_rate)
-            # self.optimizer = tf.train.RMSPropOptimizer(self._learning_rate, 0.99, 0.0, 1e-6)
-            # self.optimizer = tf.train.AdamOptimizer(0.0001)
-            # self.optimizer = tf.train.GradientDescentOptimizer(0.1)
-            self.train_op = self.optimizer.minimize(self._loss,
-                global_step=tf.contrib.framework.get_global_step())
+
+            grads_and_vars = self.optimizer.compute_gradients(self._loss, tf.trainable_variables())
+
+            grads = [gv[0] for gv in grads_and_vars]
+            params = [gv[1] for gv in grads_and_vars]
+
+            grads = tf.clip_by_global_norm(grads, 5.0)[0]
+
+            # clipped_grads_and_vars = [(
+            #    tf.clip_by_norm(grad, 5.0), var) for grad, var in grads_and_vars]
+            clipped_grads_and_vars = zip(grads, params)
+            self.train_op = self.optimizer.apply_gradients(clipped_grads_and_vars,
+                                                           global_step=tf.contrib.framework.get_global_step())
+
+            # self.train_op = self.optimizer.minimize(self._loss,
+            #    global_step=tf.contrib.framework.get_global_step())
         with tf.name_scope('target_network_update'):
             q_network_params = [t for t in tf.trainable_variables() if t.name.startswith(
                 'q_network')]
@@ -294,3 +306,6 @@ class MinecraftDQNAgent(object):
             # print self._epsilons[min(self._current_time_step, self._epsilon_decay_steps - 1)]
             # print "Updating target!"
             self.sess.run(self.target_update_ops)
+
+def clipped_error(x):
+    return tf.where(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)

@@ -1,7 +1,9 @@
 import gym
+import gym_minecraft
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import re
 import pickle
 import random
 from sklearn.cluster import KMeans
@@ -10,47 +12,48 @@ from sklearn.neighbors import KNeighborsClassifier
 
 
 def make_clusters(env_name, n_clusters):
+    # import clustering_minecraft as cm
+    # returned_data, labels, cluster_centers = cm.make_clusters('MinecraftBasic-v0', 4)
+    # from scipy.misc import toimage
+    # toimage(estimator.cluster_centers_[3].reshape((84,84,3))).show()
+
     env = gym.make(env_name)
-    env.load_mission_file('./game.xml')
+    with open('./game_clustering.xml', 'r') as myfile:
+        game_xml = myfile.read()
     env.init(start_minecraft=True, allowDiscreteMovement=True)
-    env.reset()
-    VALID_ACTIONS = list(range(env.action_space.n))
+    VALID_ACTIONS = 2
 
     data = []
+    moves = {0: 0,  # move forward
+             1: 8,  # turn left
+             2: 9  # turn right
+             }
 
-    for episode in xrange(1000):
+    x_vals = map(lambda x: x + 0.5, [i for i in range(1,10)] + [i for i in range(12,21)]
+                 + [i for i in range(23,32)] + [i for i in range(34,43)])
+    z_vals = map(lambda x: x + 0.5, [i for i in range(1,10)])
+
+    for episode in xrange(50):
+        game_xml = re.sub(r'x=\"\d+.\d+\" z=\"\d+.\d+\"', 'x="{}" z="{}"'.format(random.choice(x_vals),
+                                                                                random.choice(z_vals)), game_xml)
+        env.load_mission_xml(game_xml)
         state = env.reset()
         done = False
         step_count = 0
         while not done:
             step_count += 1
-            action = random.randint(0, len(VALID_ACTIONS) - 1)
+            action = moves[random.randint(0, VALID_ACTIONS)]
             next_state, reward, done, _ = env.step(action)
-            if reward >= 1:
-                reward = 1000000000000000
-            state = next_state
-            state_with_reward = state[:]
-            state_with_reward = np.append(state_with_reward, reward)
-            data.append(state_with_reward)
+            data.append(next_state.flatten())
+    env.close()
 
     data = np.array(data)
-    x_pos_normalized = (data[:, 0] - np.mean(data[:, 0])) / np.std(data[:, 0])
-    velocity_normalized = (data[:, 1] - np.mean(data[:, 1])) / np.std(data[:, 1])
-    reward_normalized = (data[:, 2] - np.mean(data[:, 2])) / np.std(data[:, 2])
-    data_normalized = zip(x_pos_normalized, velocity_normalized, reward_normalized)
-    # data_normalized = zip(x_pos_normalized, velocity_normalized)
 
     estimator = KMeans(n_clusters=n_clusters)
-    estimator.fit(data_normalized)
-
-    means = [np.mean(data[:, 0]), np.mean(data[:, 1])]
-    stds = [np.std(data[:, 0]), np.std(data[:, 1])]
-
-    cluster_centers = estimator.cluster_centers_[:,0:2]
-    for i in xrange(len(cluster_centers)):
-        cluster_centers[i][0] = cluster_centers[i][0] * stds[0] + means[0]
-        cluster_centers[i][1] = cluster_centers[i][1] * stds[1] + means[1]
-
+    estimator.fit(data)
+    cluster_centers = estimator.cluster_centers_
+    labels = estimator.labels_
+    labels = labels.astype(np.int32)
     # for i in xrange(len(data)):
     #    if data[i][0] >= 0.5:
     #        print 'X Position:'
@@ -60,53 +63,36 @@ def make_clusters(env_name, n_clusters):
     #        print 'Cluster:'
     #        print labels[i]
     #        print ""
-    labels = estimator.labels_
-    labels = labels.astype(np.int32)
-    colors = ['red', 'green', 'blue', 'orange',
-    'yellow', 'magenta', 'black',
-    'purple', 'brown', 'white']
-
-    fig, ax = plt.subplots()
-    for i in xrange(n_clusters):
-        label = i
-        color = colors[i%len(colors)]
-        indices_of_labels = np.where(labels==label)
-        # print indices_of_labels
-        # print data[indices_of_labels,0][0]
-        ax.scatter(data[indices_of_labels,0][0], data[indices_of_labels,1][0], c=color,
-            label=int(label), alpha=0.5)
-
-    ax.legend()
-    plt.xlabel('X Position')
-    plt.ylabel('Velocity')
 
     try:
-        os.stat('clusters_' + str(n_clusters))
+        os.stat('Minecraft_clusters_' + str(n_clusters))
     except:
-        os.mkdir('clusters_' + str(n_clusters))
-
-    plt.savefig('clusters_' + str(n_clusters) + '/Clusters.png')
+        os.mkdir('Minecraft_clusters_' + str(n_clusters))
 
     returned_data = zip(data[:, 0], data[:, 1])
 
-    with open('clusters_' + str(n_clusters) + '/data', 'w') as data_file:
+    with open('Minecraft_clusters_' + str(n_clusters) + '/data', 'w') as data_file:
         pickle.dump(returned_data, data_file)
-    with open('clusters_' + str(n_clusters) + '/labels', 'w') as labels_file:
+    with open('Minecraft_clusters_' + str(n_clusters) + '/labels', 'w') as labels_file:
         pickle.dump(labels, labels_file)
-    with open('clusters_' + str(n_clusters) + '/cluster_centers', 'w') as cluster_centers_file:
+    with open('Minecraft_clusters_' + str(n_clusters) + '/cluster_centers', 'w') as cluster_centers_file:
         pickle.dump(cluster_centers, cluster_centers_file)
+    with open('Minecraft_clusters_' + str(n_clusters) + '/kmeans', 'w') as kmeans_file:
+        pickle.dump(estimator, kmeans_file)
 
     return returned_data, labels, cluster_centers
 
 
 def get_cluster_fn(env_name='MountainCar-v0', n_clusters=10, extra_bit=True, load_from_dir=True):
     if load_from_dir:
-        with open('clusters_' + str(n_clusters) + '/data', 'rb') as data_file:
+        with open('Minecraft_clusters_' + str(n_clusters) + '/data', 'rb') as data_file:
             data = pickle.load(data_file)
-        with open('clusters_' + str(n_clusters) + '/labels', 'rb') as labels_file:
+        with open('Minecraft_clusters_' + str(n_clusters) + '/labels', 'rb') as labels_file:
             labels = pickle.load(labels_file)
-        with open('clusters_' + str(n_clusters) + '/cluster_centers', 'rb') as cluster_centers_file:
+        with open('Minecraft_clusters_' + str(n_clusters) + '/cluster_centers', 'rb') as cluster_centers_file:
             cluster_centers = pickle.load(cluster_centers_file)
+        with open('Minecraft_clusters_' + str(n_clusters) + '/kmeans', 'rb') as kmeans_file:
+            estimator = pickle.load(kmeans_file)
 
     else:
         data, labels, cluster_centers = make_clusters(env_name, n_clusters)

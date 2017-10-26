@@ -37,7 +37,7 @@
                 <DrawBlock   x="5"   y="226"  z="5"  type="iron_block" />                           <!-- the starting marker -->
 
             </DrawingDecorator>
-            <ServerQuitFromTimeUp timeLimitMs="45000" description="out_of_time"/>
+            <ServerQuitFromTimeUp timeLimitMs="5000" description="out_of_time"/>
             <ServerQuitWhenAnyAgentFinishes />
         </ServerHandlers>
     </ServerSection>
@@ -64,7 +64,7 @@
             </RewardForTouchingBlockType>
             <RewardForSendingCommand reward="-1"/>
             <AgentQuitFromTouchingBlockType>
-                <Block type="wool" colour="RED"/>
+                <Block type="wool" colour="WHITE"/>
             </AgentQuitFromTouchingBlockType>
         </AgentHandlers>
     </AgentSection>
