@@ -9,29 +9,33 @@ class ControllerDqnAgent(DqnAgent):
         super(ControllerDqnAgent, self).__init__(*args, **kwargs)
 
     def _q_network(self, state, subgoal):
-        state_layer1 = tf.contrib.layers.fully_connected(state, 64, activation_fn=tf.nn.relu)
+        conv1 = tf.layers.conv2d(inputs=state, filters=8, kernel_size=[5, 5], padding='valid', activation=tf.nn.relu)
+        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=1)
+        conv2 = tf.layers.conv2d(inputs=pool1, filters=16, kernel_size=[5, 5], padding='valid', activation=tf.nn.relu)
+        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=1)
+        conv3 = tf.layers.conv2d(inputs=pool2, filters=32, kernel_size=[3, 3], padding='valid', activation=tf.nn.relu)
+        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=1)
+        pool3_flat = tf.contrib.layers.flatten(pool3)
+
         subgoal_layer1 = tf.contrib.layers.fully_connected(subgoal, 64, activation_fn=tf.nn.relu)
 
-        layer1 = tf.concat([state_layer1, subgoal_layer1], axis=1)
+        concatenated = tf.concat([pool3_flat, subgoal_layer1], axis=1)
 
-        q_values = tf.contrib.layers.fully_connected(layer1, self._num_actions, activation_fn=None)
+        dense1 = tf.contrib.layers.fully_connected(concatenated, 64, activation_fn=tf.nn.relu)
+        q_values = tf.contrib.layers.fully_connected(dense1, self._num_actions, activation_fn=None)
 
         return q_values
 
     def _construct_graph(self):
-        # state_shape=[None]
-        # subgoal_shape=[None]
-        # for dim in self._state_dims:
-        #    state_shape.append(dim)
-        # for dim in self._subgoal_dims:
-        #    subgoal_shape.append(dim)
-        state_shape = self._state_dims[0]
-        subgoal_shape = self._subgoal_dims[0]
+        state_shape=[None]
+        subgoal_shape=[None]
+        for dim in self._state_dims:
+            state_shape.append(dim)
+        for dim in self._subgoal_dims:
+            subgoal_shape.append(dim)
 
-        self._state = tf.placeholder(shape=[None, state_shape + subgoal_shape],
-            dtype=tf.float32)
-        self._controller_state, self._subgoal = tf.split(
-            self._state, [state_shape, subgoal_shape], axis=1)
+        self._state = tf.placeholder(shape=state_shape, dtype=tf.float32)
+        self._subgoal = tf.placeholder(shape=subgoal_shape, dtype=tf.float32)
 
         with tf.variable_scope('q_network'):
             self._q_values = self._q_network(self._controller_state, self._subgoal)
