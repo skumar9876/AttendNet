@@ -278,7 +278,7 @@ class MinecraftDQNAgent(object):
 
     def best_action(self, state):
         q_values = self.sess.run(self._q_values, {self._state: state})
-        return np.argmax(q_values), None
+        return np.argmax(q_values)
 
     def store(self, state, action, reward, next_state, terminal, eval=False):
         if not eval:
